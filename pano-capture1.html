@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1720">
+<title>360° 촬영 도우미 (시제품)</title>
+<style>
+:root{
+  --bg:#0f1720; --panel:#18222e; --line:#2b3947; --text:#eef3f8; --sub:#9fb0c1;
+  --brand:#4d9bff; --ok:#3ecf7a; --warn:#ffcc33; --stop:#ff6b6b;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:"Pretendard","Noto Sans KR","Malgun Gothic",sans-serif;font-size:16px;line-height:1.6}
+.screen{display:none;position:fixed;inset:0}
+.screen.on{display:flex;flex-direction:column}
+.scroll{overflow-y:auto;padding:22px 18px 40px;max-width:640px;margin:0 auto;width:100%}
+h1{font-size:1.45rem;margin:0 0 4px}
+.sub{color:var(--sub);margin:0 0 18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:12px 0}
+.card h2{font-size:1.02rem;margin:0 0 6px}
+.card ul{margin:6px 0 0;padding-left:20px}
+.card li{margin:3px 0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label{display:block;margin:10px 0 4px;font-weight:700}
+input[type=range]{width:100%}
+select{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0f1720;color:var(--text);font-size:1rem}
+button{font-family:inherit;font-size:1.05rem;font-weight:700;border:0;border-radius:12px;padding:14px 18px;min-height:52px;
+  background:var(--brand);color:#fff;cursor:pointer}
+button.ghost{background:#2a3948;color:var(--text)}
+button.warn{background:#b8860b;color:#fff}
+button:disabled{opacity:.4}
+button:focus-visible{outline:3px solid var(--warn);outline-offset:2px}
+.msg{border-left:5px solid;border-radius:8px;padding:10px 14px;margin:10px 0;font-size:.95rem}
+.msg.ok{background:#12301f;border-color:var(--ok)}
+.msg.warn{background:#35290a;border-color:var(--warn)}
+.msg.stop{background:#3a1618;border-color:var(--stop)}
+#err{color:#ffb3b3;margin:10px 0;min-height:1.4em}
+#sensorInfo{font-family:Consolas,monospace;font-size:.9rem;color:var(--sub)}
+
+/* 촬영 화면 */
+#s-cap{background:#000}
+#vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#ov{position:absolute;inset:0;width:100%;height:100%}
+#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s}
+#hudTop{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 10px;
+  background:linear-gradient(#000a,#0000);display:flex;flex-direction:column;gap:6px}
+#count{font-weight:800;font-size:1.15rem}
+#bar{height:8px;border-radius:4px;background:#ffffff33;overflow:hidden}
+#barIn{height:100%;width:0;background:var(--ok);transition:width .2s}
+#dbg{font-size:.8rem;color:#cfe0f0;font-family:Consolas,monospace}
+#hudBot{position:absolute;left:0;right:0;bottom:0;padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 14px);
+  background:linear-gradient(#0000,#000b);display:flex;flex-direction:column;gap:10px}
+#hint{text-align:center;font-weight:700;text-shadow:0 1px 3px #000}
+#hudBot .row{flex-wrap:nowrap}
+#hudBot button{flex:1;padding:12px 8px;font-size:.98rem}
+
+/* 합성 중 */
+#s-proc{align-items:center;justify-content:center;text-align:center;padding:30px}
+.pbar{width:min(420px,80vw);height:12px;border-radius:6px;background:#2a3948;overflow:hidden;margin:16px auto}
+#pbarIn{height:100%;width:0;background:var(--brand)}
+
+/* 결과 */
+#pv{flex:1;min-height:0;background:#000}
+#pv img{width:100%;height:100%;object-fit:contain}
+#resBar{padding:12px 14px calc(env(safe-area-inset-bottom,0px) + 12px);background:var(--panel);border-top:1px solid var(--line)}
+#resBar .row button, #resBar .row a{flex:1}
+a.btn{display:flex;align-items:center;justify-content:center;text-decoration:none;font-weight:700;border-radius:12px;
+  padding:14px 18px;min-height:52px;background:var(--ok);color:#06210f}
+</style>
+</head>
+<body>
+
+<!-- ① 시작 화면 -->
+<section id="s-start" class="screen on">
+<div class="scroll">
+  <h1>360° 촬영 도우미</h1>
+  <p class="sub">시제품 · 폰 카메라로 제자리에서 돌며 찍으면 360° 사진으로 이어 붙여 줍니다.</p>
+
+  <div class="card">
+    <h2>촬영 방법</h2>
+    <ul>
+      <li>폰을 <b>세로</b>로 들고, 화면 <b>자동 회전은 꺼 두세요</b>.</li>
+      <li>팔꿈치를 몸에 붙이고 폰을 <b>몸 가까이</b> 잡은 채, <b>제자리에서</b> 발끝으로 돌아요. 팔을 멀리 뻗으면 가까운 물건이 겹쳐 보여요. 삼각대가 있으면 가장 좋아요.</li>
+      <li>화면의 원에 가운데 십자를 맞추고 <b>숨을 멈추듯 1초쯤 가만히</b> 있으면 자동으로 찍힙니다. 흔들리면 안 찍혀요.</li>
+      <li>원을 모두 채우면(총 23장) 자동으로 합쳐집니다.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>센서 확인</h2>
+    <div id="sensorInfo">움직임 센서 값을 기다리는 중…</div>
+    <div class="msg warn" id="rotWarn" style="display:none">폰이 가로로 인식되고 있어요. 자동 회전을 끄고 세로로 들어 주세요.</div>
+  </div>
+
+  <div class="card">
+    <h2>설정</h2>
+    <label for="fov">카메라 화각 (긴 쪽) <span id="fovVal">67</span>°</label>
+    <input type="range" id="fov" min="55" max="85" step="1" value="67">
+    <div class="sub" style="margin:2px 0 0;font-size:.88rem">처음에는 그대로 두세요. 합친 뒤 이음새가 어긋나면 결과 화면에서 바꿔 다시 합칠 수 있어요.</div>
+    <label for="size">결과 사진 크기</label>
+    <select id="size">
+      <option value="2048">작게 (2048 · 빠름)</option>
+      <option value="3072">보통 (3072)</option>
+      <option value="4096" selected>크게 (4096 · 권장)</option>
+    </select>
+  </div>
+
+  <div id="err"></div>
+  <button id="btnStart" style="width:100%">촬영 시작</button>
+</div>
+</section>
+
+<!-- ② 촬영 화면 -->
+<section id="s-cap" class="screen">
+  <video id="vid" playsinline muted autoplay></video>
+  <canvas id="ov"></canvas>
+  <div id="flash"></div>
+  <div id="hudTop">
+    <div id="count">0 / 23</div>
+    <div id="bar"><div id="barIn"></div></div>
+    <div id="dbg"></div>
+  </div>
+  <div id="hudBot">
+    <div id="hint">노란 원에 가운데 십자를 맞추고 가만히 멈추세요</div>
+    <div class="row">
+      <button class="ghost" id="btnUndo">되돌리기</button>
+      <button class="warn" id="btnDone" disabled>지금 합치기</button>
+      <button class="ghost" id="btnCancel">취소</button>
+    </div>
+  </div>
+</section>
+
+<!-- ③ 합성 중 -->
+<section id="s-proc" class="screen">
+  <div>
+    <h1>이어 붙이는 중…</h1>
+    <div class="pbar"><div id="pbarIn"></div></div>
+    <div id="pText" class="sub">0%</div>
+    <div class="sub">폰이 뜨거워질 수 있어요. 화면을 끄지 마세요.</div>
+  </div>
+</section>
+
+<!-- ④ 결과 -->
+<section id="s-res" class="screen">
+  <div id="pv"></div>
+  <div id="resBar">
+    <div class="sub" style="margin:0 0 6px;font-size:.9rem">사물이 겹쳐 보이거나 이음새가 어긋나면 아래 설정을 바꿔 같은 사진으로 다시 합쳐 보세요. 화각 <b id="fov2Val">67</b>°</div>
+    <input type="range" id="fov2" min="55" max="85" step="1" value="67">
+    <div class="row" style="margin-top:10px">
+      <select id="blend" aria-label="이음새 방식" style="flex:1.3">
+        <option value="1">또렷하게 (겹침 줄이기)</option>
+        <option value="0">부드럽게 (경계 흐리기)</option>
+      </select>
+      <button class="ghost" id="btnRe">이 설정으로 다시 합치기</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <a class="btn" id="dl" download="pano.jpg">사진 저장</a>
+      <button class="ghost" id="btnAgain">다시 찍기</button>
+    </div>
+  </div>
+</section>
+
+<script>
+// ==CORE-START==
+var D2R = Math.PI / 180;
+
+function mul3(a, b) {
+  var o = [], i, j, k, s;
+  for (i = 0; i < 3; i++) {
+    o.push([]);
+    for (j = 0; j < 3; j++) {
+      s = 0;
+      for (k = 0; k < 3; k++) s += a[i][k] * b[k][j];
+      o[i].push(s);
+    }
+  }
+  return o;
+}
+
+// W3C DeviceOrientation: R = Rz(alpha) * Rx(beta) * Ry(gamma)
+// 세계 좌표: x=동, y=북, z=위. 폰 뒷면 카메라는 기기 -z 방향을 본다.
+function eulerToAxes(alphaDeg, betaDeg, gammaDeg) {
+  var a = alphaDeg * D2R, b = betaDeg * D2R, g = gammaDeg * D2R;
+  var ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cg = Math.cos(g), sg = Math.sin(g);
+  var Rz = [[ca, -sa, 0], [sa, ca, 0], [0, 0, 1]];
+  var Rx = [[1, 0, 0], [0, cb, -sb], [0, sb, cb]];
+  var Ry = [[cg, 0, sg], [0, 1, 0], [-sg, 0, cg]];
+  var M = mul3(mul3(Rz, Rx), Ry);
+  return {
+    r: [M[0][0], M[1][0], M[2][0]],      // 사진의 오른쪽
+    u: [M[0][1], M[1][1], M[2][1]],      // 사진의 위쪽
+    f: [-M[0][2], -M[1][2], -M[2][2]]    // 카메라가 보는 방향
+  };
+}
+
+function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+function dirFromYawPitch(yaw, pitch) {
+  var cp = Math.cos(pitch);
+  return [cp * Math.sin(yaw), cp * Math.cos(yaw), Math.sin(pitch)];
+}
+function yawPitchOf(f) {
+  return { yaw: Math.atan2(f[0], f[1]), pitch: Math.asin(Math.max(-1, Math.min(1, f[2]))) };
+}
+
+// 촬영 목표 지점 (yaw는 시작한 방향을 0으로 한 상대값, 단위 도)
+function buildTargets() {
+  var t = [], i;
+  for (i = 0; i < 9; i++) t.push({ yaw: i * 40, pitch: 0 });          // 정면 둘레 9장
+  for (i = 0; i < 6; i++) t.push({ yaw: 30 + i * 60, pitch: 55 });    // 위쪽 6장
+  t.push({ yaw: 0, pitch: 90 });                                       // 천장 1장
+  for (i = 0; i < 6; i++) t.push({ yaw: 30 + i * 60, pitch: -55 });   // 아래쪽 6장
+  t.push({ yaw: 0, pitch: -90 });                                      // 바닥 1장
+  return t;
+}
+
+// 사진들을 360°(정방형) 판에 배치하고 가장자리를 부드럽게 섞는 합성기
+function makeStitcher(shots, W, H, F, yaw0, sharp) {
+  var n = shots.length, k, s, i;
+  for (k = 0; k < n; k++) {
+    s = shots[k];
+    s.cx = (s.w - 1) / 2; s.cy = (s.h - 1) / 2;
+    s.cosMax = Math.cos(Math.atan(Math.sqrt(s.cx * s.cx + s.cy * s.cy) / F));
+  }
+  var sinL = new Float32Array(W), cosL = new Float32Array(W), lon;
+  for (i = 0; i < W; i++) {
+    lon = ((i + 0.5) / W * 2 - 1) * Math.PI + yaw0;
+    sinL[i] = Math.sin(lon); cosL[i] = Math.cos(lon);
+  }
+  return function (y0, y1, out) {
+    var x, y, lat, cl, sl, dx, dy, dz, sr, sg, sb, sw, zc, xc, yc, px, py, nx, ny, wg;
+    var x0, yb, fx, fy, o, idx, d, a00, a10, a01, a11, p, q, w2, w4, w8;
+    for (y = y0; y < y1; y++) {
+      lat = Math.PI / 2 - (y + 0.5) / H * Math.PI;
+      cl = Math.cos(lat); sl = Math.sin(lat);
+      for (x = 0; x < W; x++) {
+        dx = cl * sinL[x]; dy = cl * cosL[x]; dz = sl;
+        sr = 0; sg = 0; sb = 0; sw = 0;
+        for (k = 0; k < n; k++) {
+          s = shots[k];
+          zc = dx * s.f[0] + dy * s.f[1] + dz * s.f[2];
+          if (zc < s.cosMax) continue;
+          xc = dx * s.r[0] + dy * s.r[1] + dz * s.r[2];
+          yc = dx * s.u[0] + dy * s.u[1] + dz * s.u[2];
+          px = s.cx + F * xc / zc;
+          py = s.cy - F * yc / zc;
+          if (px < 0 || py < 0 || px > s.w - 1.001 || py > s.h - 1.001) continue;
+          nx = (px - s.cx) / (s.w / 2); ny = (py - s.cy) / (s.h / 2);
+          wg = (1 - Math.abs(nx)) * (1 - Math.abs(ny));
+          if (sharp) { w2 = wg * wg; w4 = w2 * w2; w8 = w4 * w4; wg = w8 * w4 + 1e-9; }   // 가장 가까운 사진을 거의 단독 사용 (겹침 줄이기)
+          else wg = wg * wg + 1e-6;                                                           // 여러 사진을 부드럽게 섞기
+          x0 = px | 0; yb = py | 0; fx = px - x0; fy = py - yb;
+          d = s.data; idx = (yb * s.w + x0) * 4;
+          a00 = (1 - fx) * (1 - fy); a10 = fx * (1 - fy); a01 = (1 - fx) * fy; a11 = fx * fy;
+          p = idx; q = idx + s.w * 4;
+          sr += wg * (d[p] * a00 + d[p + 4] * a10 + d[q] * a01 + d[q + 4] * a11);
+          sg += wg * (d[p + 1] * a00 + d[p + 5] * a10 + d[q + 1] * a01 + d[q + 5] * a11);
+          sb += wg * (d[p + 2] * a00 + d[p + 6] * a10 + d[q + 2] * a01 + d[q + 6] * a11);
+          sw += wg;
+        }
+        o = (y * W + x) * 4;
+        if (sw > 0) { out[o] = sr / sw; out[o + 1] = sg / sw; out[o + 2] = sb / sw; }
+        else { out[o] = 40; out[o + 1] = 44; out[o + 2] = 50; }
+        out[o + 3] = 255;
+      }
+    }
+  };
+}
+
+// 여러 번 측정한 자세(합)를 하나의 올바른 자세로 되돌리기
+function orthoAxes(sr, sf) {
+  var nf = Math.sqrt(sf[0] * sf[0] + sf[1] * sf[1] + sf[2] * sf[2]) || 1;
+  var f = [sf[0] / nf, sf[1] / nf, sf[2] / nf];
+  var d = dot(sr, f), r = [sr[0] - d * f[0], sr[1] - d * f[1], sr[2] - d * f[2]];
+  var nr = Math.sqrt(r[0] * r[0] + r[1] * r[1] + r[2] * r[2]) || 1;
+  r = [r[0] / nr, r[1] / nr, r[2] / nr];
+  var u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+  return { r: r, u: u, f: f };
+}
+
+// 목표가 화면 밖일 때: 가운데 십자에서 점선으로 이어지는, 머리가 하나뿐인 큰 화살표
+function drawGuideArrow(ctx, W, H, ang, rr, label, pulse) {
+  var cx = W / 2, cy = H / 2, ca = Math.cos(ang), sa = Math.sin(ang);
+  // 화면 가장자리 가까이(방향에 따라 거리 조절)에 화살표를 둔다
+  rr = Math.min((W / 2 - 74) / Math.max(Math.abs(ca), 0.001), (H / 2 - 150) / Math.max(Math.abs(sa), 0.001));
+  rr = Math.max(rr, 120);
+  var ex = cx + ca * rr, ey = cy + sa * rr, sc = 1.15;
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // 안내선 (십자 → 화살표)
+  ctx.setLineDash([14, 12]);
+  ctx.beginPath(); ctx.moveTo(cx + ca * 30, cy + sa * 30); ctx.lineTo(ex - ca * 52 * sc, ey - sa * 52 * sc);
+  ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.stroke();
+  ctx.lineWidth = 4; ctx.strokeStyle = '#ffcc33'; ctx.stroke();
+  ctx.setLineDash([]);
+  // 큰 화살표
+  ctx.translate(ex, ey); ctx.rotate(ang);
+  var s = sc + 0.07 * Math.sin(pulse * 6); ctx.scale(s, s);
+  ctx.beginPath();
+  ctx.moveTo(-44, -11); ctx.lineTo(6, -11); ctx.lineTo(6, -29); ctx.lineTo(50, 0);
+  ctx.lineTo(6, 29); ctx.lineTo(6, 11); ctx.lineTo(-44, 11); ctx.closePath();
+  ctx.fillStyle = '#ffcc33'; ctx.fill();
+  ctx.lineWidth = 5; ctx.strokeStyle = '#161616'; ctx.stroke();
+  ctx.restore();
+  // 글자 (남은 각도): 화살표 옆(수직 방향)에 둔다
+  if (label) {
+    ctx.save();
+    ctx.font = '700 17px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var tw = ctx.measureText(label).width + 26;
+    var nx0 = -sa, ny0 = ca, best = null, sg, nx, ny, off, lx0, lx1, ly0, err;
+    for (sg = 1; sg >= -1; sg -= 2) {   // 화살표 양옆 중 화면 안에 자연스럽게 들어가는 쪽을 고른다
+      nx = nx0 * sg; ny = ny0 * sg;
+      off = 40 * sc + Math.abs(nx) * (tw / 2) + Math.abs(ny) * 17 + 6;
+      lx0 = ex + nx * off; ly0 = ey + ny * off;
+      lx1 = Math.max(tw / 2 + 8, Math.min(W - tw / 2 - 8, lx0));
+      err = Math.abs(lx0 - lx1) * 3 + (ly0 < 150 || ly0 > H - 150 ? 100 : 0) - ny * 0.01;
+      if (!best || err < best.err) best = { err: err, lx: lx1, ly: ly0 };
+    }
+    var lx = best.lx, ly = best.ly;
+    ctx.fillStyle = 'rgba(0,0,0,.72)';
+    ctx.fillRect(lx - tw / 2, ly - 17, tw, 34);
+    ctx.fillStyle = '#ffcc33'; ctx.fillText(label, lx, ly);
+    ctx.restore();
+  }
+}
+
+// 목표가 어느 쪽에 있는지 글로 알려 주기
+function dirText(xc, yc, zc) {
+  var dh = Math.atan2(xc, zc) / D2R, dv = Math.atan2(yc, zc) / D2R, p = [];
+  if (Math.abs(dh) >= 5) p.push((dh > 0 ? '오른쪽 ' : '왼쪽 ') + Math.round(Math.abs(dh)) + '°');
+  if (Math.abs(dv) >= 5) p.push((dv > 0 ? '위 ' : '아래 ') + Math.round(Math.abs(dv)) + '°');
+  return p.join(' · ');
+}
+// ==CORE-END==
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var TOL_DEG = 4.5, DWELL_SEC = 0.8, MAX_SPEED = 6, MIN_TO_STITCH = 10, MAX_SIDE = 1280;
+
+  var st = { fov: 67, size: 4096, sharp: true };
+  try {
+    var saved = JSON.parse(localStorage.getItem('pano_set') || '{}');
+    if (saved.fov) st.fov = saved.fov;
+    if (saved.size) st.size = saved.size;
+    if (typeof saved.sharp === 'boolean') st.sharp = saved.sharp;
+  } catch (e) {}
+
+  var ori = { a: 0, b: 90, g: 0, has: false };
+  var stream = null, running = false;
+  var targets = [], absDirs = [], done = [], shots = [], yaw0 = 0;
+  var prevF = null, prevT = 0, dwell = 0, speed = 0, accR = [0, 0, 0], accF = [0, 0, 0], accN = 0;
+  var grabCv = document.createElement('canvas');
+  var grabCtx = grabCv.getContext('2d', { willReadFrequently: true });
+  var vid = $('vid'), ov = $('ov'), octx = ov.getContext('2d');
+  var viewer = null, blobUrl = null;
+
+  window.addEventListener('deviceorientation', function (e) {
+    if (e.alpha === null || e.beta === null || e.gamma === null) return;
+    ori.a = e.alpha; ori.b = e.beta; ori.g = e.gamma; ori.has = true;
+  }, true);
+
+  function show(id) {
+    var list = document.querySelectorAll('.screen');
+    for (var i = 0; i < list.length; i++) list[i].classList.remove('on');
+    $(id).classList.add('on');
+  }
+  function saveSet() { try { localStorage.setItem('pano_set', JSON.stringify(st)); } catch (e) {} }
+
+  // 설정 화면
+  $('fov').value = st.fov; $('fovVal').textContent = st.fov; $('size').value = String(st.size);
+  $('fov').addEventListener('input', function () { st.fov = +this.value; $('fovVal').textContent = st.fov; saveSet(); });
+  $('size').addEventListener('change', function () { st.size = +this.value; saveSet(); });
+
+  setInterval(function () {
+    if ($('s-start').classList.contains('on')) {
+      var info = $('sensorInfo');
+      if (!ori.has) { info.textContent = '움직임 센서 값을 기다리는 중… (폰에서 열었는지 확인하세요)'; }
+      else {
+        var ax = eulerToAxes(ori.a, ori.b, ori.g), yp = yawPitchOf(ax.f);
+        info.textContent = '센서 정상 · 방향 ' + Math.round((yp.yaw / D2R + 360) % 360) + '° · 높이 ' + Math.round(yp.pitch / D2R) + '°';
+      }
+      var ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : 0;
+      $('rotWarn').style.display = (ang % 180 !== 0) ? 'block' : 'none';
+    }
+  }, 300);
+
+  // 촬영 시작
+  $('btnStart').addEventListener('click', startCapture);
+  async function startCapture() {
+    $('err').textContent = '';
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        var p = await DeviceOrientationEvent.requestPermission();
+        if (p !== 'granted') throw new Error('움직임 센서 사용을 허락해 주세요.');
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
+        throw new Error('카메라를 쓸 수 없는 주소입니다. https:// 로 시작하는 주소로 접속해 주세요.');
+      if (!ori.has) {
+        await new Promise(function (r) { setTimeout(r, 1200); });
+        if (!ori.has) throw new Error('움직임 센서 값이 들어오지 않습니다. 폰 브라우저(Chrome)로 열었는지 확인해 주세요.');
+      }
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false
+      });
+    } catch (e) {
+      var m = (e && e.name === 'NotAllowedError') ? '카메라 사용을 허락해 주세요. (주소창 왼쪽 자물쇠 → 권한)' : (e.message || String(e));
+      $('err').textContent = m; return;
+    }
+    vid.srcObject = stream;
+    try { await vid.play(); } catch (e) {}
+    var tries = 0;
+    while (!vid.videoWidth && tries < 40) { await new Promise(function (r) { setTimeout(r, 100); }); tries++; }
+    try { if (navigator.wakeLock) navigator.wakeLock.request('screen'); } catch (e) {}
+
+    var ax = eulerToAxes(ori.a, ori.b, ori.g);
+    yaw0 = yawPitchOf(ax.f).yaw;
+    targets = buildTargets();
+    absDirs = targets.map(function (t) { return dirFromYawPitch(yaw0 + t.yaw * D2R, t.pitch * D2R); });
+    done = targets.map(function () { return false; });
+    shots = []; prevF = null; dwell = 0; speed = 0; resetAcc();
+    updateHud();
+    show('s-cap');
+    running = true;
+    requestAnimationFrame(loop);
+  }
+
+  function stopStream() {
+    running = false;
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+    vid.srcObject = null;
+  }
+
+  function grabFrame() {
+    var vw = vid.videoWidth, vh = vid.videoHeight;
+    var s = Math.min(1, MAX_SIDE / Math.max(vw, vh));
+    var w = Math.round(vw * s), h = Math.round(vh * s);
+    grabCv.width = w; grabCv.height = h;
+    grabCtx.drawImage(vid, 0, 0, w, h);
+    var id = grabCtx.getImageData(0, 0, w, h);
+    return { w: w, h: h, data: id.data };
+  }
+
+  function resetAcc() { accR = [0, 0, 0]; accF = [0, 0, 0]; accN = 0; }
+
+  function capture(idx) {
+    var fr = grabFrame();
+    // 멈춰 있던 동안 측정한 자세를 평균 내어 센서 떨림을 줄인다
+    var ax = accN > 0 ? orthoAxes(accR, accF) : eulerToAxes(ori.a, ori.b, ori.g);
+    resetAcc();
+    shots.push({ idx: idx, w: fr.w, h: fr.h, data: fr.data, r: ax.r, u: ax.u, f: ax.f });
+    done[idx] = true;
+    var fl = $('flash'); fl.style.transition = 'none'; fl.style.opacity = '.55';
+    requestAnimationFrame(function () { fl.style.transition = 'opacity .25s'; fl.style.opacity = '0'; });
+    try { if (navigator.vibrate) navigator.vibrate(25); } catch (e) {}
+    updateHud();
+    if (shots.length === targets.length) { setTimeout(startStitch, 400); }
+  }
+
+  function updateHud() {
+    var n = shots.length, total = targets.length;
+    $('count').textContent = n + ' / ' + total;
+    $('barIn').style.width = (n / total * 100) + '%';
+    $('btnDone').disabled = n < MIN_TO_STITCH;
+    $('btnUndo').disabled = n === 0;
+  }
+
+  $('btnUndo').addEventListener('click', function () {
+    if (!shots.length) return;
+    var s = shots.pop(); done[s.idx] = false; updateHud();
+  });
+  $('btnDone').addEventListener('click', function () { if (shots.length >= MIN_TO_STITCH) startStitch(); });
+  $('btnCancel').addEventListener('click', function () { stopStream(); shots = []; show('s-start'); });
+
+  function nearestUncaptured(f) {
+    var best = -1, bd = -2, i, d;
+    for (i = 0; i < absDirs.length; i++) {
+      if (done[i]) continue;
+      d = dot(f, absDirs[i]);
+      if (d > bd) { bd = d; best = i; }
+    }
+    return { idx: best, deg: best < 0 ? 999 : Math.acos(Math.min(1, bd)) / D2R };
+  }
+
+  function loop(ts) {
+    if (!running) return;
+    var ax = eulerToAxes(ori.a, ori.b, ori.g);
+    var dt = prevT ? (ts - prevT) / 1000 : 0.016; prevT = ts;
+    if (prevF && dt > 0) {
+      var c = Math.min(1, Math.max(-1, dot(prevF, ax.f)));
+      speed = speed * 0.7 + (Math.acos(c) / D2R / dt) * 0.3;
+    }
+    prevF = ax.f;
+
+    var near = nearestUncaptured(ax.f);
+    var aimed = near.idx >= 0 && near.deg < TOL_DEG;
+    if (aimed && speed < MAX_SPEED) {
+      dwell += dt;
+      for (var q = 0; q < 3; q++) { accR[q] += ax.r[q]; accF[q] += ax.f[q]; }
+      accN++;
+    } else if (aimed && speed < MAX_SPEED * 2) {
+      // 조금 흔들리는 중: 기다리기만 한다
+    } else {
+      dwell = 0; resetAcc();
+    }
+    if (near.idx >= 0 && dwell >= DWELL_SEC) { var di = near.idx; dwell = 0; capture(di); }
+
+    var yp = yawPitchOf(ax.f);
+    $('dbg').textContent = '방향 ' + Math.round((yp.yaw / D2R + 360) % 360) + '° · 높이 ' + Math.round(yp.pitch / D2R) + '° · 흔들림 ' + speed.toFixed(1) + '°/초' +
+      ' · 영상 ' + vid.videoWidth + '×' + vid.videoHeight;
+    var ang = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : 0;
+    var hint = $('hint');
+    if (ang % 180 !== 0) hint.textContent = '폰을 세로로 들어 주세요 (자동 회전 끄기)';
+    else if (near.idx < 0) hint.textContent = '모두 찍었어요!';
+    else if (aimed && speed < MAX_SPEED) hint.textContent = '맞았어요! 그대로 멈추세요';
+    else if (aimed) hint.textContent = '거의 다 됐어요. 흔들리지 않게 잡아 주세요';
+    else {
+      var dd = absDirs[near.idx], tx = dirText(dot(dd, ax.r), dot(dd, ax.u), dot(dd, ax.f));
+      hint.textContent = '노란 원 쪽으로 돌리세요' + (tx ? ' : ' + tx : '');
+    }
+
+    draw(ax, near);
+    requestAnimationFrame(loop);
+  }
+
+  function draw(ax, near) {
+    var dpr = window.devicePixelRatio || 1, W = window.innerWidth, H = window.innerHeight;
+    if (ov.width !== Math.round(W * dpr) || ov.height !== Math.round(H * dpr)) { ov.width = Math.round(W * dpr); ov.height = Math.round(H * dpr); }
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, W, H);
+    var vw = vid.videoWidth || 4, vh = vid.videoHeight || 3;
+    var scale = Math.max(W / vw, H / vh);
+    var fS = (Math.max(vw, vh) / 2) / Math.tan(st.fov * D2R / 2) * scale;
+    var R = Math.min(W, H) * 0.06, i, d, zc, xc, yc, sx, sy;
+
+    for (i = 0; i < absDirs.length; i++) {
+      d = absDirs[i];
+      zc = dot(d, ax.f);
+      if (zc < 0.08) continue;
+      xc = dot(d, ax.r); yc = dot(d, ax.u);
+      sx = W / 2 + fS * xc / zc; sy = H / 2 - fS * yc / zc;
+      if (sx < -R || sx > W + R || sy < -R || sy > H + R) continue;
+      octx.beginPath();
+      if (done[i]) {
+        octx.arc(sx, sy, R * 0.55, 0, 6.2832);
+        octx.fillStyle = 'rgba(62,207,122,.75)'; octx.fill();
+      } else if (i === near.idx) {
+        octx.arc(sx, sy, R * 1.2, 0, 6.2832);
+        octx.lineWidth = 5; octx.strokeStyle = '#ffcc33'; octx.stroke();
+        if (dwell > 0) {
+          octx.beginPath();
+          octx.arc(sx, sy, R * 1.2 + 8, -Math.PI / 2, -Math.PI / 2 + 6.2832 * Math.min(1, dwell / DWELL_SEC));
+          octx.lineWidth = 6; octx.strokeStyle = '#3ecf7a'; octx.stroke();
+        }
+      } else {
+        octx.arc(sx, sy, R * 0.8, 0, 6.2832);
+        octx.lineWidth = 3; octx.strokeStyle = 'rgba(255,255,255,.85)'; octx.stroke();
+      }
+    }
+
+    // 가운데 십자
+    octx.strokeStyle = '#fff'; octx.lineWidth = 3;
+    octx.beginPath();
+    octx.moveTo(W / 2 - 16, H / 2); octx.lineTo(W / 2 + 16, H / 2);
+    octx.moveTo(W / 2, H / 2 - 16); octx.lineTo(W / 2, H / 2 + 16);
+    octx.stroke();
+
+    // 목표가 화면 밖이면 방향 화살표
+    if (near.idx >= 0) {
+      d = absDirs[near.idx];
+      zc = dot(d, ax.f); xc = dot(d, ax.r); yc = dot(d, ax.u);
+      sx = W / 2 + fS * xc / Math.max(zc, 0.0001); sy = H / 2 - fS * yc / Math.max(zc, 0.0001);
+      var off = zc < 0.08 || sx < 0 || sx > W || sy < 0 || sy > H;
+      if (off) {
+        var a = Math.atan2(-yc, xc), rr = Math.min(W, H) * 0.30;
+        drawGuideArrow(octx, W, H, a, rr, dirText(xc, yc, zc), performance.now() / 1000);
+      }
+    }
+  }
+
+  // 합치기
+  function startStitch() {
+    if (!running && !shots.length) return;
+    stopStream();
+    runStitch();
+  }
+
+  function runStitch() {
+    show('s-proc');
+    $('pbarIn').style.width = '0'; $('pText').textContent = '0%';
+    var W = st.size, H = W / 2;
+    var F = (Math.max(shots[0].w, shots[0].h) / 2) / Math.tan(st.fov * D2R / 2);
+    var stitch = makeStitcher(shots, W, H, F, yaw0, st.sharp);
+    var out = new Uint8ClampedArray(W * H * 4), y = 0;
+    function tick() {
+      var t0 = performance.now();
+      while (y < H && performance.now() - t0 < 40) {
+        var y1 = Math.min(H, y + 4); stitch(y, y1, out); y = y1;
+      }
+      var pc = Math.round(y / H * 100);
+      $('pbarIn').style.width = pc + '%'; $('pText').textContent = pc + '%';
+      if (y < H) setTimeout(tick, 0); else finishStitch(out, W, H);
+    }
+    setTimeout(tick, 30);
+  }
+
+  function finishStitch(out, W, H) {
+    var cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    cv.getContext('2d').putImageData(new ImageData(out, W, H), 0, 0);
+    cv.toBlob(function (blob) {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      blobUrl = URL.createObjectURL(blob);
+      var dt = new Date(), z = function (n) { return (n < 10 ? '0' : '') + n; };
+      var name = 'pano_' + dt.getFullYear() + z(dt.getMonth() + 1) + z(dt.getDate()) + '_' + z(dt.getHours()) + z(dt.getMinutes()) + z(dt.getSeconds()) + '.jpg';
+      $('dl').href = blobUrl; $('dl').download = name;
+      $('fov2').value = st.fov; $('fov2Val').textContent = st.fov; $('blend').value = st.sharp ? '1' : '0';
+      show('s-res');
+      showViewer(blobUrl);
+    }, 'image/jpeg', 0.92);
+  }
+
+  function showViewer(url) {
+    if (viewer) { try { viewer.destroy(); } catch (e) {} viewer = null; }
+    var pv = $('pv'); pv.innerHTML = '';
+    function fallback() { pv.innerHTML = '<img alt="결과 사진" src="' + url + '">'; }
+    function build() {
+      try {
+        viewer = pannellum.viewer('pv', { type: 'equirectangular', panorama: url, autoLoad: true, showControls: true, hfov: 100 });
+      } catch (e) { fallback(); }
+    }
+    if (window.pannellum) { build(); return; }
+    var l = document.createElement('link'); l.rel = 'stylesheet';
+    l.href = 'https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.css'; document.head.appendChild(l);
+    var s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pannellum/2.5.6/pannellum.js';
+    s.onload = build; s.onerror = fallback; document.head.appendChild(s);
+  }
+
+  $('fov2').addEventListener('input', function () { $('fov2Val').textContent = this.value; });
+  $('btnRe').addEventListener('click', function () {
+    st.fov = +$('fov2').value; st.sharp = $('blend').value === '1'; $('fov').value = st.fov; $('fovVal').textContent = st.fov; saveSet();
+    runStitch();
+  });
+  $('btnAgain').addEventListener('click', function () {
+    if (viewer) { try { viewer.destroy(); } catch (e) {} viewer = null; }
+    shots = []; show('s-start');
+  });
+})();
+</script>
+</body>
+</html>
